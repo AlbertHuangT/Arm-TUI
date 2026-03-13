@@ -15,49 +15,27 @@ Step through ARM32 programs instruction by instruction, watch registers change i
 - **Instruction whitelist** — only standard ARM32 instructions are permitted; illegal instructions halt execution with an error message
 - **Breakpoints** — toggle on the current line, run continuously until hit
 
-## Requirements
-
-- macOS (Apple Silicon or Intel)
-- Rust toolchain (`rustup`)
-- CMake, Unicorn, Keystone (installed via Homebrew)
-
 ## Installation
 
-### 1. Install system dependencies
+### Via Homebrew (recommended)
 
 ```bash
-brew install cmake unicorn keystone
+brew tap AlbertHuangT/arm-tui
+brew install arm-tui
 ```
 
-### 2. Patch keystone-engine for modern CMake (one-time fix)
+That's it — no Rust, no CMake, no manual patching required.
 
-The `keystone-engine` crate bundles CMakeLists.txt files that are incompatible with CMake 4.x. Run this after the first `cargo build` attempt fails, or preemptively:
+### Build from source
 
-```bash
-BASE=$(ls -d ~/.cargo/registry/src/*/keystone-engine-0.1.0/keystone 2>/dev/null | head -1)
-for f in "$BASE/CMakeLists.txt" "$BASE/llvm/CMakeLists.txt" \
-          "$BASE/samples/CMakeLists.txt" "$BASE/kstool/CMakeLists.txt"; do
-  [ -f "$f" ] || continue
-  sed -i '' 's/cmake_minimum_required(VERSION [0-9.]*)/cmake_minimum_required(VERSION 3.10)/g' "$f"
-  sed -i '' '/cmake_policy(SET CMP0051/d' "$f"
-done
-```
-
-### 3. Build and install
+Requirements: macOS, Rust toolchain (`rustup`), CMake and Unicorn via Homebrew.
 
 ```bash
+brew install cmake unicorn
 git clone https://github.com/AlbertHuangT/Arm-TUI.git
 cd Arm-TUI
-cargo install --path .
+cargo install --locked --offline --path .
 ```
-
-Or just build locally:
-
-```bash
-cargo build --release
-```
-
-The binary will be at `target/release/arm-tui`.
 
 ## Usage
 
