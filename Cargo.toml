@@ -1,0 +1,17 @@
+[package]
+name = "arm-tui"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "arm-tui"
+path = "src/main.rs"
+
+[dependencies]
+ratatui = "0.29"
+crossterm = "0.28"
+unicorn-engine = "2.1"
+keystone-engine = "0.1"
+capstone = "0.12"
+clap = { version = "4", features = ["derive"] }
+anyhow = "1"
