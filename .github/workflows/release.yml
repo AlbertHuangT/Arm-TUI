@@ -1,0 +1,69 @@
+name: Release & Update Homebrew Tap
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release create "${{ github.ref_name }}" --generate-notes
+
+      - name: Compute tarball sha256
+        id: sha
+        run: |
+          TAG="${{ github.ref_name }}"
+          URL="https://github.com/AlbertHuangT/Arm-TUI/archive/refs/tags/${TAG}.tar.gz"
+          SHA=$(curl -fsSL "$URL" | sha256sum | awk '{print $1}')
+          echo "sha256=$SHA" >> "$GITHUB_OUTPUT"
+          echo "url=$URL" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Update Homebrew formula
+        env:
+          TAP_TOKEN: ${{ secrets.TAP_TOKEN }}
+        run: |
+          TAG="${{ steps.sha.outputs.tag }}"
+          VERSION="${{ steps.sha.outputs.version }}"
+          URL="${{ steps.sha.outputs.url }}"
+          SHA="${{ steps.sha.outputs.sha256 }}"
+
+          # Fetch current formula
+          RESP=$(curl -fsSL \
+            -H "Authorization: Bearer $TAP_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/AlbertHuangT/homebrew-arm-tui/contents/Formula/arm-tui.rb")
+
+          CURRENT_SHA=$(echo "$RESP" | python3 -c "import sys,json; print(json.load(sys.stdin)['sha'])")
+          CONTENT=$(echo "$RESP" | python3 -c "import sys,json,base64; print(base64.b64decode(json.load(sys.stdin)['content']).decode())")
+
+          # Replace url, sha256, and version lines
+          NEW_CONTENT=$(echo "$CONTENT" \
+            | sed "s|url \".*\"|url \"$URL\"|" \
+            | sed "s|sha256 \".*\"|sha256 \"$SHA\"|" \
+            | sed "s|version \".*\"|version \"$VERSION\"|")
+
+          # If no version line exists, insert after sha256
+          if ! echo "$NEW_CONTENT" | grep -q "^  version "; then
+            NEW_CONTENT=$(echo "$NEW_CONTENT" | sed "s|  sha256 \"$SHA\"|  sha256 \"$SHA\"\n  version \"$VERSION\"|")
+          fi
+
+          ENCODED=$(echo "$NEW_CONTENT" | base64 -w 0)
+
+          curl -fsSL -X PUT \
+            -H "Authorization: Bearer $TAP_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/AlbertHuangT/homebrew-arm-tui/contents/Formula/arm-tui.rb" \
+            -d "{\"message\":\"chore: bump to $TAG\",\"content\":\"$ENCODED\",\"sha\":\"$CURRENT_SHA\"}"
