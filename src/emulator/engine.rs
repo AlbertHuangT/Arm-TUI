@@ -138,6 +138,18 @@ impl Engine {
         })
         .map_err(|e| anyhow::anyhow!("注册 INTR hook 失败: {:?}", e))?;
 
+        // 非法内存访问 hook，防止 Unicorn native 崩溃
+        uc.add_mem_hook(
+            unicorn_engine::unicorn_const::HookType::MEM_INVALID,
+            0, u64::MAX,
+            |uc, _mem_type, addr, _size, _value| {
+                uc.get_data_mut().error = Some(format!("访问未映射内存: 0x{:08x}", addr));
+                let _ = uc.emu_stop();
+                false
+            },
+        )
+        .map_err(|e| anyhow::anyhow!("注册 MEM_INVALID hook 失败: {:?}", e))?;
+
         Ok(())
     }
 
@@ -147,8 +159,9 @@ impl Engine {
         }
 
         let pc = state.pc();
-        let code_end = self.assembled.base_addr as u64 + self.assembled.code.len() as u64;
-        if (pc as u64) >= code_end {
+        let code_start = self.assembled.base_addr as u64;
+        let code_end = code_start + self.assembled.code.len() as u64;
+        if (pc as u64) < code_start || (pc as u64) >= code_end {
             state.status = EmulatorStatus::Finished;
             return Ok(());
         }
@@ -160,7 +173,7 @@ impl Engine {
         let mut uc = self.restore_unicorn(state)?;
         Self::add_hooks(&mut uc)?;
 
-        let _ = uc.emu_start(pc as u64, pc as u64 + 4, 0, 1);
+        let _ = uc.emu_start(pc as u64, CODE_BASE + CODE_SIZE, 0, 1);
 
         if let Some(e) = uc.get_data().error.clone() {
             state.error = Some(e);
